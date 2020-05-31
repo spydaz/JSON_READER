@@ -1,9 +1,236 @@
 ﻿Imports System.IO
 Imports System.Net
+Imports System.Net.Security
 Imports System.Runtime.Serialization.Json
+Imports System.Security.Cryptography.X509Certificates
+Imports System.Text
 Imports System.Web.Script.Serialization
+Imports System.Xml
 
+Module TMP
+    '       +----------------------------------------------------------------------------+
+    '       |																			|
+    '       |	getMode                                    							    |
+    '       |	=======  			                        							|
+    '       |																			|
+    '       |	Inputs:	    VOID							            				|
+    '       |																			|
+    '       |	Returns:	VOID            											|
+    '       |																			|
+    '       |	Notes:	    Determine if user is expecting XML or JSON                  |
+    '       +----------------------------------------------------------------------------+			
+    Public Function getMode() As String
+        If Mode.Equals("XML") Then
+            Return "XML"
+        Else
+            Return "JSON"
+        End If
+    End Function
+    ''' <summary>
+    ''' SET XML or JSON
+    ''' </summary>
+    Dim Mode As String = "JSON"
 
+    '+--------------------------------------------------------------------------+
+    '|																			|
+    '|	ValidateServerCertificate   										    |
+    '|	=========================   											|
+    '|																			|
+    '|	Inputs:		Object sender  												|
+    '|              X509Certificate certificate                                 |
+    '|              X509Chain chain                                             |
+    '|              SslPolicyErrors sslPolicyErrors                             |
+    '|																			|
+    '|	Returns:	bool														|
+    '|																			|
+    '|	Notes:		Override to allow any host certificate.                     | 
+    '+--------------------------------------------------------------------------+	
+    Public Function ValidateServerCertificate(ByVal sender As Object, ByVal certificate As X509Certificate, ByVal chain As X509Chain, ByVal sslPolicyErrors As SslPolicyErrors) As Boolean
+        Return True
+    End Function
+    '
+    '       +----------------------------------------------------------------------------+
+    '       |																			|
+    '       |	httpRequest                                							    |
+    '       |	===========			                        							|
+    '       |																			|
+    '       |	Inputs:	    string verb 					            				|
+    '       |																			|
+    '       |	Returns:	VOID            											|
+    '       |																			|
+    '       |	Notes:	   Accept 'put', 'post', 'get', or delete from the caller and   |
+    '       |               perform the appropriate HTTP communications with the SLAPI   |
+    '       |               server.                                                      |
+    '       +----------------------------------------------------------------------------+															
+    '       
+    Public Function httpRequest(ByVal verb As String, ByRef API_URL As String, ByRef API_ENDPOINT As String,
+                            ByRef USERNAME As String, API_KEY As String, ByRef POST_STR As String) As String
+        httpRequest = ""
+        Try
+            Dim url As String = API_URL + "/" + API_ENDPOINT
+            Dim req As HttpWebRequest = TryCast(WebRequest.Create(New Uri(url)), HttpWebRequest)
+            Dim authPair As [String] = USERNAME + ":" + API_KEY
+            authPair = System.Convert.ToBase64String(System.Text.ASCIIEncoding.ASCII.GetBytes(authPair))
+            ServicePointManager.ServerCertificateValidationCallback = New RemoteCertificateValidationCallback(AddressOf ValidateServerCertificate)
+            req.Headers.Add("Authorization", "Basic " & authPair)
+            req.Method = verb
+            If getMode().Equals("XML") Then
+                req.ContentType = "text/json"
+            Else
+                req.ContentType = "text/xml"
+            End If
+            If (verb.Equals("post")) OrElse (verb.Equals("put")) Then
+                Dim content As Byte() = UTF8Encoding.UTF8.GetBytes(POST_STR.Trim())
+                req.ContentLength = content.Length
+                Using post As Stream = req.GetRequestStream()
+                    post.Write(content, 0, content.Length)
+                End Using
+            End If
+            Dim result As String = Nothing
+            Using resp As HttpWebResponse = TryCast(req.GetResponse(), HttpWebResponse)
+                Dim reader As New StreamReader(resp.GetResponseStream())
+                result = reader.ReadToEnd()
+            End Using
+            If getMode().Equals("XML") Then
+                Return FormatXml(result)
+            Else
+                Return FormatJSON(result)
+            End If
+        Catch [error] As WebException
+
+            Dim extMsg As String = ""
+
+            If [error].Response IsNot Nothing Then
+
+                If [error].Response.ContentLength <> 0 Then
+                    Using stream = [error].Response.GetResponseStream()
+                        Using reader = New StreamReader(stream)
+                            extMsg = reader.ReadToEnd()
+                        End Using
+                    End Using
+                End If
+
+            End If
+            System.Windows.Forms.MessageBox.Show([error].Message.ToString() + vbCrLf + extMsg)
+        End Try
+    End Function
+    '+--------------------------------------------------------------------------+
+    '|																			|
+    '|	txtPostvars_Leave		                							    |
+    '|	=================          	    										|
+    '|																			|
+    '|	Inputs:		object sender (ignored)										|
+    '|              EventArgs e   (ignored)                                     |
+    '|																			|
+    '|	Returns:	VOID            											|
+    '|																			|
+    '|	Notes:		Default event called when text box looses focus.            |
+    '|              Whenever the user modifies the XML post vars we will see    |
+    '|              if we can't pretty it up.                                   |
+    '+--------------------------------------------------------------------------+	
+    Private Sub Textbox_Leave(ByVal sender As TextBox, ByVal e As System.EventArgs)
+        'Handles sender.leave
+        If sender.TextLength > 0 Then
+            Dim txt As [String] = ""
+            If getMode().Equals("XML") Then
+                txt = FormatXml(sender.Text)
+            Else
+                txt = FormatJSON(sender.Text)
+            End If
+            sender.Text = txt
+        End If
+    End Sub
+    '+--------------------------------------------------------------------------+
+    '|																			|
+    '|	FormatXml      			                							    |
+    '|	=========                 	    										|
+    '|																			|
+    '|	Inputs:		string unformattedXml										|
+    '|																			|
+    '|	Returns:	string formattedXml											|
+    '|																			|
+    '|	Notes:		Use this method to perform some basic housekeeping on       |
+    '|              XML string before plunking them into a text box.  It will   |
+    '|              make the output easier on the eyes.                         |
+    '+--------------------------------------------------------------------------+
+    Public Function FormatXml(ByVal unformattedXml As String) As String
+        Dim xd As New XmlDocument()
+        Try
+            xd.LoadXml(unformattedXml)
+        Catch [error] As Exception
+            System.Windows.Forms.MessageBox.Show([error].Message.ToString())
+            Return unformattedXml
+        End Try
+        Dim sb As New StringBuilder()
+        Dim sw As New StringWriter(sb)
+        Dim xtw As XmlTextWriter = Nothing
+        Try
+            xtw = New XmlTextWriter(sw)
+            xtw.Formatting = Formatting.Indented
+            xd.WriteTo(xtw)
+        Finally
+            If xtw IsNot Nothing Then
+                xtw.Close()
+            End If
+        End Try
+        Return sb.ToString()
+    End Function
+    '       +---------------------------------------------------------------------------+
+    '       |																     	    |
+    '       |	FormatJson      			                							|
+    '       |	=========                 	    										|
+    '       |																			|
+    '       |	Inputs:		string unformattedJson										|
+    '       |																			|
+    '       |	Returns:	string formattedJson										|
+    '       |																			|
+    '       |	Notes:	   Use this method to perform some basic housekeeping on        |
+    '       |              JSON string before plunking them into a text box.  It will   |
+    '       |              make the output easier on the eyes.                          |
+    '       +---------------------------------------------------------------------------+															
+    Public Function FormatJSON(ByVal unformattedJSON As String) As String
+        Dim sb As New StringBuilder()
+        Dim chars As Char() = unformattedJSON.ToCharArray()
+        Dim len As Integer = chars.Length
+        Dim indent As Integer = 0
+        Dim last_char As Char = " "c
+        Dim new_line As Boolean = True
+        For i As Integer = 0 To len - 1
+            If chars(i) = "}"c Then
+                new_line = True
+                sb.AppendLine()
+            ElseIf chars(i) = "{"c Then
+                If i > 0 Then
+                    sb.AppendLine()
+                    For j As Integer = 0 To indent - 1
+                        sb.Append(" "c)
+                    Next
+                End If
+            End If
+            If last_char = "}"c Then
+                indent -= 3
+            End If
+            If last_char = "{"c Then
+                new_line = True
+                sb.AppendLine()
+                indent += 3
+            End If
+            If last_char = ","c Then
+                sb.AppendLine()
+                new_line = True
+            End If
+            If new_line Then
+                For j As Integer = 0 To indent - 1
+                    sb.Append(" "c)
+                Next
+            End If
+            sb.Append(chars(i))
+            new_line = False
+            last_char = chars(i)
+        Next
+        Return sb.ToString()
+    End Function
+End Module
 ''' <summary>
 ''' Conversion from JSON
 ''' 
