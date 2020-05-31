@@ -48,6 +48,9 @@
     <OptionInfer>On</OptionInfer>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="Newtonsoft.Json, Version=12.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
+      <HintPath>packages\Newtonsoft.Json.12.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Data" />
     <Reference Include="System.Deployment" />
@@ -75,11 +78,10 @@
     <Import Include="System.Threading.Tasks" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="FormJson_Reader.vb">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="FormJson_Reader.Designer.vb">
+    <Compile Include="FormJson_Reader.designer.vb">
       <DependentUpon>FormJson_Reader.vb</DependentUpon>
+    </Compile>
+    <Compile Include="FormJson_Reader.vb">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="Mths.vb" />
@@ -121,6 +123,28 @@
       <LastGenOutput>Settings.Designer.vb</LastGenOutput>
     </None>
     <None Include="App.config" />
+    <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\BluPrint.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\Console A.jpg" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\Console_B.jpg" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\Green_end_left.gif" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\Green_end_right.gif" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\Orange_end_right.gif" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Resources\OrangeLeftEnd.ico" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.VisualBasic.targets" />
 </Project>
